@@ -1,0 +1,16 @@
+{
+  "name": "html5-eventsource",
+  "description": "An implementation of the standard HTML5 EventSource client interface",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/AMorgaut/html5-eventsource.git"
+  },
+  "author": "Alexandre Morgaut <Alexandre.Morgaut@gmail.com> (http://github.com/AMorgaut)",
+  "main": "./html5-eventsource.js",
+  "engines": {
+    "node": "*",
+    "wakanda": "*"
+  },
+  "license": "MIT"
+}
