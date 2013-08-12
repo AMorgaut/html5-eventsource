@@ -12,5 +12,9 @@
     "node": "*",
     "wakanda": "*"
   },
+  "dependencies": [
+      {"w3c-domevents": "0.1.0"},
+      {"w3c-domcore-errors": "0.1.0"}
+  ],
   "license": "MIT"
 }
