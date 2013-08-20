@@ -66,6 +66,7 @@ function EventSource(url, eventSourceInitDict) {
         // other internal variables
         urlObj,
         nbRetryConnect,
+        redirectFlag,
         client;
 
 
@@ -344,8 +345,8 @@ function EventSource(url, eventSourceInitDict) {
                     errorMessage = 'Needs Proxy Authentication';
                     return true;
 
-                // TODO
                 // handled by the fetching and CORS algorithms. 
+                // TODO
                 // In the case of 301 redirects, the user agent must also remember the new URL 
                 // so that subsequent requests for this resource for this EventSource object 
                 // start with the URL given for the last 301 seen for requests for this object.
@@ -356,8 +357,14 @@ function EventSource(url, eventSourceInitDict) {
                     redirectURL = rows.filter(function (row) {
                         return (row.substr(0, 8).toUpperCase() === 'LOCATION');
                     })[0].substr(9).trim();
-                    errorMessage = 'Should Redirect to: "' + redirectURL + '"';
-                    errorMessage += LF + '(status: ' + status + ')';
+                    if (!redirectURL) {
+                        errorMessage = 'Redirect expected (status: ' + status + ')';
+                        errorMessage += ' but no Location found';
+                    }
+                    urlObj = resolveTheUrl(redirectURL);
+                    redirectFlag = true;
+                    client.end();
+                    potentiallyCORSEnabledFetch(urlObj);
                     return true;
 
                 // TODO
@@ -519,7 +526,9 @@ function EventSource(url, eventSourceInitDict) {
         // HANDLE SERVER CONNECTION CLOSE
 
         client.on('end', function onConnectionClose() {
-            readyState = EventSource.CLOSED;
+            if (!redirectFlag) {
+                readyState = EventSource.CLOSED;
+            }
         });
     }
 
