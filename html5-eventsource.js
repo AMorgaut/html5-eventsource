@@ -300,23 +300,27 @@ function EventSource(url, eventSourceInitDict) {
      * @private
      * @method parseTheConnection
      * @param {Array} rows
-     * @returns Array
+     * @param {Function} onSuccess
+     * @param {Function} onError
      **/
-    function parseTheConnection(rows) {
+    function parseTheConnection(rows, onSuccess, onError) {
         var
             statusOK,
-            acceptOk;
+            acceptOk,
+            errorMessage;
 
+        // parse until error found or connection valid and event stream starts
+        // (return true to end parseConnection loop)
         rows.some(function parseConnectionRow(row, index) {
             var
-                status;
+                status,
+                redirectURL;
 
             // STATUS LINE
             if (index === 0) {
                 row = row.split(' ');
                 if (row[0] !== 'HTTP') {
-                    failTheConnection('Bad response: ' + row);
-                    rows = [];
+                    errorMessage = 'Bad response: ' + row;
                     return true;
                 }
                 status = Number(row[1]);
@@ -325,45 +329,59 @@ function EventSource(url, eventSourceInitDict) {
                     statusOk = true;
                     return false;
 
+                // TODO
+                // should be treated transparently as for any other subresource.
                 case 305: // Use Proxy
+                    errorMessage = 'Needs to use a Proxy (status:' + status + ')';
+                    return true;
                 case 401: // Unauthorized
+                    errorMessage = 'Needs Authentication (status:' + status + ')';
+                    errorMessage += LF + rows.filter(function (row) {
+                        return (row.substr(0, 12).toUpperCase() === 'AUTHENTICATE');
+                    })[0];
+                    return true;
                 case 407: // Proxy Authentication Required
-                    // TODO
-                    // should be treated transparently as for any other subresource.
+                    errorMessage = 'Needs Proxy Authentication';
+                    return true;
 
+                // TODO
+                // handled by the fetching and CORS algorithms. 
+                // In the case of 301 redirects, the user agent must also remember the new URL 
+                // so that subsequent requests for this resource for this EventSource object 
+                // start with the URL given for the last 301 seen for requests for this object.
                 case 301: // Moved Permanently
                 case 302: // Found
                 case 303: // See Other
                 case 307: // Temporary Redirect
-                    // TODO
-                    // handled by the fetching and CORS algorithms. 
-                    // In the case of 301 redirects, the user agent must also remember the new URL 
-                    // so that subsequent requests for this resource for this EventSource object 
-                    // start with the URL given for the last 301 seen for requests for this object.
+                    redirectURL = rows.filter(function (row) {
+                        return (row.substr(0, 8).toUpperCase() === 'LOCATION');
+                    })[0].substr(9).trim();
+                    errorMessage = 'Should Redirect to: "' + redirectURL + '"';
+                    errorMessage += LF + '(status: ' + status + ')';
+                    return true;
 
+                // TODO
+                // Those responses, and any network error that prevents the 
+                // connection from being established in the first place 
+                // (e.g. DNS errors), must cause the client to asynchronously 
+                // reestablish the connection.
                 case 500: // Internal Server Error
                 case 502: // Bad Gateway
                 case 503: // Service Unavailable
                 case 504: // Gateway Timeout
-                    // TODO
-                    // Those responses, and any network error that prevents the connection from 
-                    // being established in the first place (e.g. DNS errors), must cause the user 
-                    // agent to asynchronously reestablish the connection.
 
                 default:
-                    failTheConnection('Bad Status: ' + status);
-                    rows = [];
+                    errorMessage = 'Bad or Unsupported HTTP Response Status: ' + status;
                     return true
                 }
             }
 
             // CONTENT-TYPE HEADER
-            if (row.substr(0, 12).toUpperCase() === 'CONTENT_TYPE') {
+            if (row.substr(0, 12).toUpperCase() === 'CONTENT-TYPE') {
                 row = row.split(':')[1].trim();
                 row = row.substr(0, 17);
                 if (row !== 'text/event-stream') {
-                    failTheConnection('Bad MIME Type: ' + row);
-                    rows = [];
+                    errorMessage = 'Bad MIME Type: ' + row + ' (expected "text/event-stream")';
                     return true;
                 }
                 acceptOk = true;
@@ -377,8 +395,7 @@ function EventSource(url, eventSourceInitDict) {
                     rows = rows.splice(0, index);
                     return true;
                 }
-                failTheConnection('Bad Response: ' + rows.join(LF));
-                rows = [];
+                errorMessage = 'Bad Response: ' + rows.join(LF);
                 return true;
             }
 
@@ -386,7 +403,7 @@ function EventSource(url, eventSourceInitDict) {
             return false;
         });
 
-        return rows;
+        errorMessage ? onError(errorMessage) :  onSuccess(rows);
     }
 
 
@@ -486,13 +503,15 @@ function EventSource(url, eventSourceInitDict) {
 
             rows = eol ? data.split(eol) : data;
 
-            // CHECK CONNECTION STATUS
-
             if (readyState !== EventSource.OPEN) {
-                rows = parseTheConnection(rows);
+                parseTheConnection(
+                	rows, // data
+                	parseTheEventStream, // onSuccess
+                	failTheConnection // onError
+                );
+            } else {
+                parseTheEventStream(rows);
             }
-            
-            parseTheEventStream(rows);
 
         });
 
