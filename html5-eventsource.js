@@ -365,6 +365,7 @@ function EventSource(url, eventSourceInitDict) {
                     redirectFlag = true;
                     client.end();
                     potentiallyCORSEnabledFetch(urlObj);
+                    rows = [];
                     return true;
 
                 // TODO
@@ -376,6 +377,9 @@ function EventSource(url, eventSourceInitDict) {
                 case 502: // Bad Gateway
                 case 503: // Service Unavailable
                 case 504: // Gateway Timeout
+                    reestablishTheConnection('Server Error (status: ' + status +')');
+                    rows = [];
+                    return true;
 
                 default:
                     errorMessage = 'Bad or Unsupported HTTP Response Status: ' + status;
@@ -551,9 +555,10 @@ function EventSource(url, eventSourceInitDict) {
      *
      * @private
      * @method reestablishTheConnection
+     * @param {string} [message]
      * @see http://www.w3.org/TR/eventsource/#reestablish-the-connection
      **/
-    function reestablishTheConnection() {
+    function reestablishTheConnection(message) {
         var
             task1HasRun;
         
@@ -570,6 +575,9 @@ function EventSource(url, eventSourceInitDict) {
             // step 1.3
             event = new Event('error');
             event.data = 'reconnecting'; // for a little more detailed error
+            if (message) {
+                event.data += ' ' + message
+            }
             this.dispatch(event);
             // flag task as done for step 4
             task1HasRun = true;
