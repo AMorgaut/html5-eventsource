@@ -9,7 +9,8 @@ var
     CRLF,
     LF,
     CR,
-    connections;
+    connections,
+    potentiallyCORSEnabledFetch;
 
 
 
@@ -21,6 +22,7 @@ var
  * @param {string} origin
  **/
 function MessageEvent(data, origin) {
+    "use strict";
     Event.call(this, 'message', {
         bubble: false,
         cancellable: false
@@ -41,6 +43,8 @@ MessageEvent.prototype = Object.create(Event.prototype);
  **/
 function EventSource(url, eventSourceInitDict) {
 
+    "use strict";
+
     var
 
         // PROPERTIES
@@ -51,7 +55,7 @@ function EventSource(url, eventSourceInitDict) {
         onopen,
         onmessage,
         onerror,
-        
+
         // BUFFERS
         dataBuffer,
         eventTypeBuffer,
@@ -256,7 +260,7 @@ function EventSource(url, eventSourceInitDict) {
      * @see http://www.w3.org/TR/eventsource/#fail-the-connection
      **/
     function failTheConnection(message) {
-        
+
         function failTheConnectionTask() {
             var
                 event;
@@ -264,10 +268,10 @@ function EventSource(url, eventSourceInitDict) {
             if (readyState !== EventSource.CLOSED) {
                 readyState = EventSource.CLOSED;
                 event = new Event('error');
-                //event.data = message;
+                event.data = message;
                 this.dispatch(event);
                 connectionFailed = true;
-            }            
+            }
         }
 
         queueATask(failTheConnectionTask);
@@ -306,13 +310,13 @@ function EventSource(url, eventSourceInitDict) {
      **/
     function parseTheConnection(rows, onSuccess, onError) {
         var
-            statusOK,
+            statusOk,
             acceptOk,
             errorMessage;
 
         // parse until error found or connection valid and event stream starts
         // (return true to end parseConnection loop)
-        rows.some(function parseConnectionRow(row, index) {
+        function parseConnectionRow(row, index) {
             var
                 status,
                 redirectURL;
@@ -377,13 +381,13 @@ function EventSource(url, eventSourceInitDict) {
                 case 502: // Bad Gateway
                 case 503: // Service Unavailable
                 case 504: // Gateway Timeout
-                    reestablishTheConnection('Server Error (status: ' + status +')');
+                    reestablishTheConnection('Server Error (status: ' + status + ')');
                     rows = [];
                     return true;
 
                 default:
                     errorMessage = 'Bad or Unsupported HTTP Response Status: ' + status;
-                    return true
+                    return true;
                 }
             }
 
@@ -398,10 +402,10 @@ function EventSource(url, eventSourceInitDict) {
                 acceptOk = true;
                 return false;
             }
-            
+
             // END OF HEADERS
             if (row === '') {
-                if (statusOK && acceptOk) {
+                if (statusOk && acceptOk) {
                     announceTheConnection();
                     rows = rows.splice(0, index);
                     return true;
@@ -412,9 +416,14 @@ function EventSource(url, eventSourceInitDict) {
 
             // IGNORED HEADER
             return false;
-        });
+        }
+        rows.some(parseConnectionRow);
 
-        errorMessage ? onError(errorMessage) :  onSuccess(rows);
+        if (errorMessage) {
+            onError(errorMessage);
+        } else {
+            onSuccess(rows);
+        }
     }
 
 
@@ -469,7 +478,7 @@ function EventSource(url, eventSourceInitDict) {
      **/
     function establishTheConnection() {
 
-        client = net.connect(urlObj.port, urlObj.host, function onConnectionOpen(connection) {
+        client = net.connect(urlObj.port, urlObj.host, function onConnectionOpen() {
             var
                 request;
 
@@ -516,9 +525,9 @@ function EventSource(url, eventSourceInitDict) {
 
             if (readyState !== EventSource.OPEN) {
                 parseTheConnection(
-                	rows, // data
-                	parseTheEventStream, // onSuccess
-                	failTheConnection // onError
+                    rows, // data
+                    parseTheEventStream, // onSuccess
+                    failTheConnection // onError
                 );
             } else {
                 parseTheEventStream(rows);
@@ -561,7 +570,7 @@ function EventSource(url, eventSourceInitDict) {
     function reestablishTheConnection(message) {
         var
             task1HasRun;
-        
+
         function taskStep1() {
             var
                 event;
@@ -576,7 +585,7 @@ function EventSource(url, eventSourceInitDict) {
             event = new Event('error');
             event.data = 'reconnecting'; // for a little more detailed error
             if (message) {
-                event.data += ' ' + message
+                event.data += ' ' + message;
             }
             this.dispatch(event);
             // flag task as done for step 4
@@ -584,13 +593,13 @@ function EventSource(url, eventSourceInitDict) {
         }
 
         function waitTask1HasRun(onTaskOneOver) {
-            
+
             if (!task1HasRun) {
                 setTimeout(waitTask1HasRun, 0);
             }
             onTaskOneOver();
         }
-        
+
         function taskStep5() {
             // step 5.1
             if (readyState !== EventSource.CONNECTING) {
@@ -609,7 +618,7 @@ function EventSource(url, eventSourceInitDict) {
             // step 4 & 5
             waitTask1HasRun(doStep5);
         }
-        
+
         nbRetryConnect += 1;
 
         // step 1
@@ -617,7 +626,7 @@ function EventSource(url, eventSourceInitDict) {
 
         // step 2 & 3
         setTimeout(onceDelayOver, reconnectionTime * nbRetryConnect);
-        
+
     }
 
     // EVENT SOURCE OBJECT CONSTRUCTION
@@ -625,7 +634,7 @@ function EventSource(url, eventSourceInitDict) {
     reconnectionTime = RECONNECTION_TIME;
 
     // http://www.w3.org/TR/eventsource/#dom-eventsource
-    
+
     // step 1 & 2
     urlObj = resolveTheUrl(url);
 
@@ -851,5 +860,6 @@ EventTarget = EventTarget || require('w3c-domevents').EventTarget;
 Event = Event || require('w3c-domevents').Event;
 
 connections = [];
+remoteEventTaskSource = [];
 
 exports.EventSource = EventSource;
